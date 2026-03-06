@@ -1,10 +1,31 @@
 # Jira Support Dashboard
 
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Release](https://img.shields.io/github/v/release/Lucas-Gourmelon/jira-support-dashboard)
+
 A lightweight **local support monitoring dashboard for Jira**.
 
 This tool synchronizes Jira issues into a **local SQLite database** and exposes a **FastAPI dashboard** to visualize support activity in real time.
 
 It is designed for **support teams and incident monitoring screens**.
+
+---
+
+# Table of Contents
+
+- Features
+- Screenshot
+- Installation
+- Running locally
+- Building the executable
+- Running the executable
+- Architecture
+- Environment variables
+- Security
+- Technology stack
+- Use cases
+- License
 
 ---
 
@@ -37,8 +58,10 @@ Dashboard includes:
 
 ## 1 Clone the repository
 
-git clone https://github.com/Lucas-Gourmelon/jira-support-dashboard.git  
+```
+git clone https://github.com/Lucas-Gourmelon/jira-support-dashboard.git
 cd jira-support-dashboard
+```
 
 ---
 
@@ -46,18 +69,22 @@ cd jira-support-dashboard
 
 Copy the example configuration:
 
+```
 cp .env.example .env
+```
 
 Edit `.env` and fill your Jira credentials.
 
 Example:
 
-JIRA_BASE_URL=https://your-domain.atlassian.net  
-JIRA_EMAIL=your-email  
-JIRA_API_TOKEN=your-api-token  
-JIRA_JQL=project NOT IN (PROXAI) ORDER BY updated ASC 
-JIRA_PAGE_SIZE=100  
-SQLITE_PATH=./jira_issues.db  
+```
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email
+JIRA_API_TOKEN=your-api-token
+JIRA_JQL=project NOT IN (PROXAI) ORDER BY updated ASC
+JIRA_PAGE_SIZE=100
+SQLITE_PATH=./jira_issues.db
+```
 
 ---
 
@@ -65,23 +92,33 @@ SQLITE_PATH=./jira_issues.db
 
 Create a virtual environment:
 
+```
 python -m venv .venv
+```
 
 Activate it:
 
+```
 .\.venv\Scripts\activate
+```
 
 Install dependencies:
 
+```
 pip install -r requirements.txt
+```
 
 Run the API:
 
+```
 .\run.ps1
+```
 
 The dashboard will be available at:
 
+```
 http://localhost:6441
+```
 
 ---
 
@@ -89,11 +126,15 @@ http://localhost:6441
 
 Build the application:
 
+```
 .\build.ps1
+```
 
 The executable will be generated in:
 
+```
 dist/jira-support-dashboard.exe
+```
 
 ---
 
@@ -103,17 +144,59 @@ Place a `.env` file next to the executable.
 
 Example structure:
 
+```
 dist
 │
 ├─ jira-support-dashboard.exe
 ├─ .env
 └─ logs
+```
 
 Then run:
 
+```
 jira-support-dashboard.exe
+```
 
 The server will start automatically.
+
+---
+
+# Architecture
+
+```
+                ┌───────────────┐
+                │     Jira API   │
+                └───────┬───────┘
+                        │
+                        │ REST API
+                        ▼
+               ┌──────────────────┐
+               │   Sync Engine     │
+               │   (run_sync)      │
+               └────────┬─────────┘
+                        │
+                        │ writes issues
+                        ▼
+                ┌───────────────┐
+                │   SQLite DB    │
+                │ jira_issues.db │
+                └───────┬───────┘
+                        │
+                        │ queries
+                        ▼
+                ┌───────────────┐
+                │    FastAPI     │
+                │   API routes   │
+                └───────┬───────┘
+                        │
+                        │ HTTP
+                        ▼
+               ┌──────────────────┐
+               │   Web Dashboard   │
+               │  (Jinja templates)│
+               └──────────────────┘
+```
 
 ---
 
