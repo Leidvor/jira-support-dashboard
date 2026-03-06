@@ -55,7 +55,7 @@ Example:
 JIRA_BASE_URL=https://your-domain.atlassian.net  
 JIRA_EMAIL=your-email  
 JIRA_API_TOKEN=your-api-token  
-JIRA_JQL=updated >= -30d ORDER BY updated ASC  
+JIRA_JQL=project NOT IN (PROXAI) ORDER BY updated ASC 
 JIRA_PAGE_SIZE=100  
 SQLITE_PATH=./jira_issues.db  
 
