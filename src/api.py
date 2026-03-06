@@ -95,6 +95,9 @@ def _run_sync_job() -> None:
     try:
         settings = load_settings()
 
+        logger.info("JQL used for sync: %s", settings.jql)
+        logger.info("SQLite path: %s", settings.sqlite_path)
+
         jira = JiraClient(
             base_url=settings.jira_base_url,
             email=settings.jira_email,
@@ -279,6 +282,27 @@ def trigger_sync() -> Dict[str, Any]:
 @app.get("/sync/status")
 def sync_status() -> Dict[str, Any]:
     return _get_status()
+
+
+@app.get("/config")
+def config_info() -> Dict[str, Any]:
+    db_path = get_sqlite_path()
+    closed_statuses = sorted(_get_closed_statuses_normalized())
+
+    try:
+        settings = load_settings()
+        jql = settings.jql
+        page_size = settings.page_size
+    except Exception as e:
+        jql = None
+        page_size = None
+
+    return {
+        "sqlite_path": db_path,
+        "jira_jql": jql,
+        "jira_page_size": page_size,
+        "closed_statuses": closed_statuses,
+    }
 
 
 @app.get("/stats/overview")

@@ -58,6 +58,11 @@ def run_sync(
 ) -> Dict[str, int]:
     repo.init_db()
 
+    last_jql = repo.get_meta("last_jql")
+    if last_jql != jql:
+        repo.clear_issues()
+        repo.set_meta("last_jql", jql)
+
     last_sync_iso = datetime.now(timezone.utc).isoformat()
 
     wanted_fields = [

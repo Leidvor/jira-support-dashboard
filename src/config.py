@@ -10,7 +10,8 @@ def _get_runtime_dir() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-load_dotenv(os.path.join(_get_runtime_dir(), ".env"))
+dotenv_path = os.path.join(_get_runtime_dir(), ".env")
+load_dotenv(dotenv_path=dotenv_path, override=True)
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,8 @@ def load_settings() -> Settings:
     jira_email = _require_env("JIRA_EMAIL")
     jira_api_token = _require_env("JIRA_API_TOKEN")
     jql = _require_env("JIRA_JQL")
+
+    print("JQL USED:", jql)
 
     page_size_raw = os.getenv("JIRA_PAGE_SIZE", "100").strip()
     sqlite_path = get_sqlite_path()

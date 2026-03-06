@@ -18,27 +18,22 @@
       --warn:#f59e0b;
       --accent:#60a5fa;
 
-      /* age severity */
-      --age-warn:#f59e0b;         /* 48–168h */
-      --age-warn-strong:#fb7185;  /* 168–720h */
-      --age-bad:#ef4444;          /* >=720h */
+      --age-warn:#f59e0b;
+      --age-warn-strong:#fb7185;
+      --age-bad:#ef4444;
 
-      /* effort highlight */
-      --effort-mild:#f59e0b;      /* >100h */
-      --effort-strong:#ef4444;    /* >300h */
+      --effort-mild:#f59e0b;
+      --effort-strong:#ef4444;
 
-      /* unassigned */
       --unassigned-bg: rgba(96,165,250,0.10);
       --unassigned-border: rgba(96,165,250,0.35);
 
-      /* scroll cue */
       --fade: rgba(11,15,20,0);
       --fade2: rgba(11,15,20,1);
     }
 
     * { box-sizing: border-box; }
 
-    /* NO PAGE SCROLL */
     html, body { height: 100%; overflow: hidden; }
 
     body {
@@ -48,7 +43,6 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
 
-    /* Fixed single-screen layout */
     .page {
       height: 100vh;
       padding: 12px 14px;
@@ -59,11 +53,10 @@
       min-height: 0;
     }
 
-    /* Header */
     .header {
       flex: 0 0 auto;
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:space-between;
       gap: 12px;
       padding: 10px 12px;
@@ -71,9 +64,36 @@
       border-radius: 14px;
       background: linear-gradient(180deg, rgba(17,24,39,0.95), rgba(15,23,42,0.95));
     }
-    .brand { display:flex; flex-direction:column; gap: 1px; min-width: 280px; }
-    .title { font-size: 20px; font-weight: 850; letter-spacing: 0.3px; line-height: 1.1; }
-    .subtitle { font-size: 12px; color: var(--muted); }
+
+    .brand {
+      display:flex;
+      flex-direction:column;
+      gap: 3px;
+      min-width: 280px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 850;
+      letter-spacing: 0.3px;
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .runtime-line {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
 
     .header-right{
       display:flex;
@@ -95,6 +115,7 @@
       color: var(--muted);
       white-space: nowrap;
     }
+
     .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--warn); flex: 0 0 auto; }
     .dot.good { background: var(--good); }
     .dot.bad { background: var(--bad); }
@@ -113,7 +134,6 @@
     .btn:hover { outline: 2px solid rgba(96,165,250,0.35); }
     .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-    /* KPI row */
     .kpis {
       flex: 0 0 auto;
       display:grid;
@@ -121,6 +141,7 @@
       gap: 10px;
       min-height: 0;
     }
+
     .card {
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -132,6 +153,7 @@
       justify-content:space-between;
       overflow: hidden;
     }
+
     .card .label {
       color: var(--muted);
       font-size: 12px;
@@ -141,7 +163,14 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .card .value { font-size: 34px; font-weight: 950; line-height: 1.0; letter-spacing: -0.6px; }
+
+    .card .value {
+      font-size: 34px;
+      font-weight: 950;
+      line-height: 1.0;
+      letter-spacing: -0.6px;
+    }
+
     .card .hint {
       color: var(--muted);
       font-size: 12px;
@@ -152,26 +181,23 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
 
-    /* Age severity colors */
     .age-normal { color: var(--text); }
     .age-warn { color: var(--age-warn); }
     .age-warn-strong { color: var(--age-warn-strong); }
     .age-bad { color: var(--age-bad); }
 
-    /* Oldest tickets row emphasis */
     tr.row-warn td { background: rgba(245,158,11,0.08); }
     tr.row-warn-strong td { background: rgba(251,113,133,0.09); }
     tr.row-bad td { background: rgba(239,68,68,0.10); }
 
-    /* Effort highlight for time-by-project */
     tr.effort-mild td { background: rgba(245,158,11,0.08); }
     tr.effort-strong td { background: rgba(239,68,68,0.10); }
     .effort-mild-text { color: var(--effort-mild); font-weight: 850; }
     .effort-strong-text { color: var(--effort-strong); font-weight: 950; }
 
-    /* Unassigned badge */
     .badge {
       display: inline-flex;
       align-items: center;
@@ -186,14 +212,15 @@
       line-height: 1;
       white-space: nowrap;
     }
+
     .badge-unassigned {
       border-color: var(--unassigned-border);
       background: var(--unassigned-bg);
       color: #cfe3ff;
     }
+
     .badge-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); }
 
-    /* Content: stretch to bottom */
     .content {
       flex: 1 1 auto;
       min-height: 0;
@@ -222,6 +249,7 @@
       min-height: 0;
       overflow: hidden;
     }
+
     .panel h2 {
       flex: 0 0 auto;
       margin: 0 0 8px 0;
@@ -234,6 +262,7 @@
       gap: 10px;
       white-space: nowrap;
     }
+
     .panel h2 .small {
       font-size: 12px;
       color: var(--muted);
@@ -242,23 +271,22 @@
       text-overflow: ellipsis;
     }
 
-    /* Table containers */
     .table-wrap {
       flex: 1 1 auto;
       min-height: 0;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: rgba(0,0,0,0.12);
-      overflow: hidden; /* default: no internal scroll */
+      overflow: hidden;
       position: relative;
     }
 
-    /* Only the 3rd panel table is scrollable (internal scroll) */
     .table-wrap.scrollable {
       overflow: auto;
       scrollbar-width: thin;
       scrollbar-color: rgba(156,163,175,0.55) rgba(0,0,0,0);
     }
+
     .table-wrap.scrollable::-webkit-scrollbar { width: 10px; }
     .table-wrap.scrollable::-webkit-scrollbar-thumb {
       background: rgba(156,163,175,0.35);
@@ -268,7 +296,6 @@
     }
     .table-wrap.scrollable::-webkit-scrollbar-track { background: rgba(0,0,0,0); }
 
-    /* Scroll cue: subtle bottom gradient + hint */
     .scroll-cue {
       pointer-events: none;
       position: absolute;
@@ -278,6 +305,7 @@
       opacity: 0.85;
       display: none;
     }
+
     .scroll-hint {
       pointer-events: none;
       position: absolute;
@@ -291,12 +319,14 @@
       border-radius: 999px;
       display: none;
     }
+
     .table-wrap.scrollable.has-overflow .scroll-cue,
     .table-wrap.scrollable.has-overflow .scroll-hint {
       display: block;
     }
 
     table { width: 100%; border-collapse: collapse; font-size: 15px; }
+
     thead th{
       background: rgba(17,24,39,0.98);
       color: var(--muted);
@@ -309,21 +339,22 @@
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
       position: sticky;
-      top: 0; /* sticky header works inside scrollable container */
+      top: 0;
       z-index: 2;
     }
+
     tbody td{
       padding: 7px 10px;
       border-bottom: 1px solid rgba(39,50,68,0.65);
       vertical-align: middle;
     }
+
     tbody tr:nth-child(even){ background: rgba(255,255,255,0.03); }
 
     .right { text-align:right; }
     .nowrap { white-space: nowrap; }
     .truncate { max-width: 1px; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* Footer */
     .footer {
       flex: 0 0 auto;
       display:flex;
@@ -338,7 +369,6 @@
       text-overflow: ellipsis;
     }
 
-    /* Responsive fallback */
     @media (max-width: 1200px){
       html, body { overflow: auto; }
       .page { height: auto; overflow: visible; }
@@ -348,16 +378,19 @@
       .card .value { font-size: 30px; }
       .table-wrap.scrollable { overflow: visible; }
       thead th { position: static; }
+      .header { flex-direction: column; align-items: stretch; }
+      .header-right { justify-content: flex-start; }
     }
   </style>
 </head>
 <body>
   <div class="page">
-    <!-- Header -->
     <div class="header">
       <div class="brand">
         <div class="title">Support Monitoring Dashboard</div>
         <div class="subtitle">Local SQLite analytics • Auto-refresh every 10s</div>
+        <div id="runtimeLine" class="runtime-line" title="Runtime information">Loading runtime info…</div>
+        <div id="syncLine" class="runtime-line" title="Last sync details">Loading sync info…</div>
       </div>
 
       <div class="header-right">
@@ -377,7 +410,6 @@
       </div>
     </div>
 
-    <!-- KPI row -->
     <div class="kpis">
       <div class="card">
         <div class="label">Total</div>
@@ -410,10 +442,8 @@
       </div>
     </div>
 
-    <!-- 3 panels row (fills remaining height) -->
     <div class="content">
       <div class="grid3">
-        <!-- Panel 1 -->
         <div class="panel">
           <h2>
             <span>Open tickets by assignee</span>
@@ -437,7 +467,6 @@
           </div>
         </div>
 
-        <!-- Panel 2 -->
         <div class="panel">
           <h2>
             <span>Top 10 oldest open tickets</span>
@@ -462,7 +491,6 @@
           </div>
         </div>
 
-        <!-- Panel 3 (scrollable table) -->
         <div class="panel">
           <h2>
             <span>Time spent by project</span>
@@ -494,13 +522,12 @@
     </div>
 
     <div class="footer">
-      <div class="truncate">Endpoints: <span class="mono">/stats/overview</span> • <span class="mono">/stats/by_assignee</span> • <span class="mono">/stats/top_oldest_open</span> • <span class="mono">/stats/time_by_project</span></div>
+      <div class="truncate">Endpoints: <span class="mono">/stats/overview</span> • <span class="mono">/stats/by_assignee</span> • <span class="mono">/stats/top_oldest_open</span> • <span class="mono">/stats/time_by_project</span> • <span class="mono">/config</span></div>
       <div class="mono" id="errorLine"></div>
     </div>
   </div>
 
 <script>
-  // Limits for TV layout
   const ASSIGNEE_TOP_N = 12;
 
   const syncBtn = document.getElementById("syncBtn");
@@ -509,6 +536,9 @@
   const syncMeta = document.getElementById("syncMeta");
   const lastRefresh = document.getElementById("lastRefresh");
   const errorLine = document.getElementById("errorLine");
+
+  const runtimeLine = document.getElementById("runtimeLine");
+  const syncLine = document.getElementById("syncLine");
 
   const kpiTotal = document.getElementById("kpiTotal");
   const kpiOpen = document.getElementById("kpiOpen");
@@ -521,7 +551,6 @@
   const assigneeBody = document.getElementById("assigneeBody");
   const oldestBody = document.getElementById("oldestBody");
   const assigneeMeta = document.getElementById("assigneeMeta");
-
   const timeByProjectBody = document.getElementById("timeByProjectBody");
   const timeByProjectMeta = document.getElementById("timeByProjectMeta");
   const timeByProjectWrap = document.getElementById("timeByProjectWrap");
@@ -543,6 +572,13 @@
     const v = Number(h);
     if (!Number.isFinite(v)) return "—";
     return fmtInt(v);
+  }
+
+  function fmtDateTime(value) {
+    if (!value) return "Never";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString();
   }
 
   function setSyncPill(state, label, meta) {
@@ -572,7 +608,7 @@
       syncBtn.disabled = true;
       syncBtn.textContent = "Sync running…";
       setSyncPill("warn", "Sync: running", "—");
-      return;
+      return data;
     }
 
     syncBtn.disabled = false;
@@ -587,6 +623,8 @@
     } else {
       setSyncPill("warn", "Sync: unknown", "—");
     }
+
+    return data;
   }
 
   async function triggerSync() {
@@ -603,7 +641,6 @@
     }
   }
 
-  // Age severity: <48 normal, 48-168 warn, 168-720 warn-strong, >=720 bad
   function ageSeverityClass(ageHours) {
     const h = Number(ageHours);
     if (!Number.isFinite(h)) return "age-normal";
@@ -674,24 +711,48 @@
   }
 
   function updateScrollableCue(el) {
-    // mark overflow to display cue/hint only if needed
     if (!el) return;
     const hasOverflow = el.scrollHeight > el.clientHeight + 2;
     el.classList.toggle("has-overflow", hasOverflow);
+  }
+
+  async function loadRuntimeInfo(syncStatus = null) {
+    try {
+      const config = await fetchJson("/config");
+      const sync = syncStatus || await fetchJson("/sync/status");
+
+      const jql = config.jira_jql || "N/A";
+      const sqlitePath = config.sqlite_path || "N/A";
+      const pageSize = config.jira_page_size ?? "N/A";
+
+      runtimeLine.textContent = `JQL: ${jql}`;
+      runtimeLine.title = `JQL: ${jql}`;
+
+      const lastRunAt = fmtDateTime(sync.last_run_at);
+      const success = sync.success === true ? "success" : sync.success === false ? "failed" : "unknown";
+      const upserted = fmtInt(sync.upserted);
+      const durationMs = fmtInt(sync.duration_ms);
+
+      syncLine.textContent = `Last sync: ${lastRunAt} • Status: ${success} • Upserted: ${upserted} • Duration: ${durationMs} ms • SQLite: ${sqlitePath} • Page size: ${pageSize}`;
+      syncLine.title = `Last sync: ${lastRunAt}\nStatus: ${success}\nUpserted: ${upserted}\nDuration: ${durationMs} ms\nSQLite: ${sqlitePath}\nPage size: ${pageSize}`;
+    } catch (e) {
+      runtimeLine.textContent = "Runtime info unavailable";
+      syncLine.textContent = "Sync info unavailable";
+    }
   }
 
   async function refreshDashboard() {
     try {
       clearError();
 
-      const [overview, byAssignee, oldestCreated, timeByProject] = await Promise.all([
+      const [overview, byAssignee, oldestCreated, timeByProject, syncStatus] = await Promise.all([
         fetchJson("/stats/overview"),
         fetchJson("/stats/by_assignee?only_open=true"),
         fetchJson("/stats/top_oldest_open?limit=10&sort=created"),
-        fetchJson("/stats/time_by_project")
+        fetchJson("/stats/time_by_project"),
+        fetchSyncStatus()
       ]);
 
-      // KPIs
       kpiTotal.textContent = fmtInt(overview.total_tickets);
       kpiOpen.textContent = fmtInt(overview.open_tickets);
       kpiClosed.textContent = fmtInt(overview.closed_tickets);
@@ -699,7 +760,6 @@
       setKpiOldest(kpiOldestCreated, kpiOldestCreatedHint, overview.oldest_open_ticket);
       setKpiOldest(kpiOldestUpdated, kpiOldestUpdatedHint, overview.oldest_open_ticket_by_updated);
 
-      // Assignee table (bounded to Top N)
       assigneeBody.innerHTML = "";
       const assignees = Array.isArray(byAssignee) ? byAssignee.slice() : [];
       assignees.sort((a,b) => Number(b.open_count || 0) - Number(a.open_count || 0));
@@ -743,7 +803,6 @@
         }
       }
 
-      // Oldest tickets table (Top 10, created)
       oldestBody.innerHTML = "";
       const oldestList = Array.isArray(oldestCreated) ? oldestCreated : [];
       if (!oldestList.length) {
@@ -790,7 +849,6 @@
         }
       }
 
-      // Time spent by project (ALL projects, sorted by total hours desc)
       timeByProjectBody.innerHTML = "";
       const projects = Array.isArray(timeByProject) ? timeByProject.slice() : [];
       projects.sort((a,b) => Number(b.time_spent_hours || 0) - Number(a.time_spent_hours || 0));
@@ -845,19 +903,18 @@
         }
       }
 
-      // Update scroll cue on the third panel (only if overflow)
-      // Use rAF to ensure layout is computed
       requestAnimationFrame(() => updateScrollableCue(timeByProjectWrap));
 
-      // Timestamp
       const t = new Date();
       lastRefresh.textContent = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-      // Sync status
-      await fetchSyncStatus();
+      await loadRuntimeInfo(syncStatus);
     } catch (e) {
       showError(String(e));
-      try { await fetchSyncStatus(); } catch (_) {}
+      try {
+        const syncStatus = await fetchSyncStatus();
+        await loadRuntimeInfo(syncStatus);
+      } catch (_) {}
     }
   }
 
@@ -871,7 +928,6 @@
     }
   });
 
-  // Recompute overflow cue if TV resolution changes / browser resizes
   window.addEventListener("resize", () => updateScrollableCue(timeByProjectWrap));
 
   refreshDashboard();

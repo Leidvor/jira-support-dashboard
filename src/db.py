@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE INDEX IF NOT EXISTS idx_issues_project_key ON issues(project_key);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_updated ON issues(updated);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 """
 
 
@@ -38,11 +43,8 @@ class IssuesRepository:
         return conn
 
     def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
-        """
-        Minimal migration helper: adds a column if missing.
-        """
         cur = conn.execute(f"PRAGMA table_info({table})")
-        cols = {row[1] for row in cur.fetchall()}  # row[1] = name
+        cols = {row[1] for row in cur.fetchall()}
         if column not in cols:
             conn.execute(ddl)
 
@@ -50,7 +52,6 @@ class IssuesRepository:
         with self.connect() as conn:
             conn.executescript(SCHEMA_SQL)
 
-            # Safe migration for existing DBs created before time_spent_seconds existed
             self._ensure_column(
                 conn,
                 table="issues",
@@ -61,9 +62,6 @@ class IssuesRepository:
             conn.commit()
 
     def upsert_issue(self, issue_row: Dict[str, Any]) -> None:
-        """
-        Upsert by issue_key.
-        """
         sql = """
         INSERT INTO issues (
           issue_key, project_key, issue_type, status, priority,
@@ -86,6 +84,7 @@ class IssuesRepository:
           last_sync=excluded.last_sync
         ;
         """
+
         values = (
             issue_row.get("issue_key"),
             issue_row.get("project_key"),
@@ -103,4 +102,29 @@ class IssuesRepository:
 
         with self.connect() as conn:
             conn.execute(sql, values)
+            conn.commit()
+
+    def clear_issues(self) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM issues")
+            conn.commit()
+
+    def get_meta(self, key: str) -> str | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM app_meta WHERE key = ?",
+                (key,),
+            ).fetchone()
+            return row[0] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO app_meta(key, value)
+                VALUES(?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (key, value),
+            )
             conn.commit()
