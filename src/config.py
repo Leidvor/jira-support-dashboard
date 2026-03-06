@@ -1,5 +1,16 @@
 import os
+import sys
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+
+def _get_runtime_dir() -> str:
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+load_dotenv(os.path.join(_get_runtime_dir(), ".env"))
 
 
 @dataclass(frozen=True)
@@ -19,6 +30,13 @@ def _require_env(name: str) -> str:
     return value
 
 
+def get_sqlite_path() -> str:
+    value = os.getenv("SQLITE_PATH", "").strip()
+    if value:
+        return value
+    return os.path.join(_get_runtime_dir(), "jira_issues.db")
+
+
 def load_settings() -> Settings:
     jira_base_url = _require_env("JIRA_BASE_URL").rstrip("/")
     jira_email = _require_env("JIRA_EMAIL")
@@ -26,7 +44,7 @@ def load_settings() -> Settings:
     jql = _require_env("JIRA_JQL")
 
     page_size_raw = os.getenv("JIRA_PAGE_SIZE", "100").strip()
-    sqlite_path = os.getenv("SQLITE_PATH", "./jira_issues.db").strip()
+    sqlite_path = get_sqlite_path()
 
     try:
         page_size = int(page_size_raw)

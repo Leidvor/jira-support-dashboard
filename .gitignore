@@ -1,64 +1,47 @@
-# ------------------------------
-# Python
-# ------------------------------
+# Python cache
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
-*.so
-*.egg-info/
-dist/
-build/
 
-# ------------------------------
-# Virtual environments
-# ------------------------------
+# Virtual environment
 .venv/
 venv/
 env/
 
-# ------------------------------
-# Environment / secrets
-# ------------------------------
-.env
-.env.*
-*.env
-
-# ------------------------------
-# Local run scripts
-# ------------------------------
-run.ps1
-run.cmd
-
-# ------------------------------
-# SQLite databases
-# ------------------------------
-*.db
-*.sqlite
-*.sqlite3
-jira_issues.db
-
-# ------------------------------
 # Logs
-# ------------------------------
 logs/
 *.log
 
-# ------------------------------
+# Environment variables
+.env
+.env.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
 # IDE
-# ------------------------------
 .vscode/
 .idea/
 
-# ------------------------------
-# OS files
-# ------------------------------
+# OS
 .DS_Store
 Thumbs.db
 
-# ------------------------------
-# Temporary
-# ------------------------------
+# Python build
+build/
+dist/
+*.egg-info/
+
+# Temporary files
 *.tmp
 *.bak
-*.swp
+
+# Node (si jamais tu ajoutes du JS plus tard)
+node_modules/
+
+*.spec

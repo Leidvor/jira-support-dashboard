@@ -2,27 +2,33 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
+import sys
 import threading
 import time
 import unicodedata
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
-import sqlite3
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from .config import load_settings
-from .jira_client import JiraClient
+from .config import get_sqlite_path, load_settings
 from .db import IssuesRepository
+from .jira_client import JiraClient
 from .sync import run_sync
 
-# ----------------------------
-# Logging (./logs/sync.log)
-# ----------------------------
-LOG_DIR = "./logs"
+if getattr(sys, "frozen", False):
+    BASE_DIR = sys._MEIPASS
+    RUNTIME_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    RUNTIME_DIR = BASE_DIR
+
+LOG_DIR = os.path.join(RUNTIME_DIR, "logs")
 LOG_PATH = os.path.join(LOG_DIR, "sync.log")
 
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -30,7 +36,6 @@ os.makedirs(LOG_DIR, exist_ok=True)
 logger = logging.getLogger("jira_sync_api")
 logger.setLevel(logging.INFO)
 
-# Avoid duplicate handlers if module reloads
 if not any(isinstance(h, logging.FileHandler) and h.baseFilename == os.path.abspath(LOG_PATH) for h in logger.handlers):
     file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
     formatter = logging.Formatter(
@@ -40,26 +45,32 @@ if not any(isinstance(h, logging.FileHandler) and h.baseFilename == os.path.absp
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
-# ----------------------------
-# FastAPI + Templates
-# ----------------------------
-app = FastAPI(title="Jira Support Sync", version="1.3.0")
-templates = Jinja2Templates(directory="templates")
-
-# ----------------------------
-# Sync status + concurrency guard
-# ----------------------------
 _status_lock = threading.Lock()
 _is_running = False
 
 _last_status: Dict[str, Any] = {
-    "last_run_at": None,  # ISO string
-    "success": None,  # bool | None (no runs yet)
-    "upserted": 0,  # int
-    "duration_ms": None,  # int | None
-    "last_error": None,  # str | None
-    "is_running": False,  # bool
+    "last_run_at": None,
+    "success": None,
+    "upserted": 0,
+    "duration_ms": None,
+    "last_error": None,
+    "is_running": False,
 }
+
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+DEFAULT_CLOSED_STATUSES = [
+    "fermé",
+    "fermée",
+    "terminé",
+    "terminée",
+    "résolu",
+    "résolue",
+    "closed",
+    "resolved",
+    "done",
+]
 
 
 def _set_status(**updates: Any) -> None:
@@ -113,7 +124,6 @@ def _run_sync_job() -> None:
             stats.get("upserted", 0),
             duration_ms,
         )
-
     except Exception as e:
         duration_ms = int((time.perf_counter() - started) * 1000)
 
@@ -126,7 +136,6 @@ def _run_sync_job() -> None:
             is_running=False,
         )
         logger.exception("Sync failed: %s", e)
-
     finally:
         with _status_lock:
             _is_running = False
@@ -144,22 +153,6 @@ def _try_start_sync() -> bool:
     t = threading.Thread(target=_run_sync_job, name="jira-sync", daemon=True)
     t.start()
     return True
-
-
-# ----------------------------
-# Stats helpers
-# ----------------------------
-DEFAULT_CLOSED_STATUSES = [
-    "fermé",
-    "fermée",
-    "terminé",
-    "terminée",
-    "résolu",
-    "résolue",
-    "closed",
-    "resolved",
-    "done",
-]
 
 
 def _normalize_for_match(value: Optional[str]) -> str:
@@ -235,9 +228,41 @@ def _hours_from_seconds(seconds: Optional[int]) -> float:
         return 0.0
 
 
-# ----------------------------
-# Routes
-# ----------------------------
+def _issues_table_exists(path: str) -> bool:
+    if not os.path.exists(path):
+        return False
+    try:
+        with sqlite3.connect(path) as conn:
+            row = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'issues'
+                """
+            ).fetchone()
+            return row is not None
+    except Exception:
+        return False
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    db_path = get_sqlite_path()
+    db_dir = os.path.dirname(db_path)
+
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+    if not _issues_table_exists(db_path):
+        logger.info("SQLite DB or issues table missing. Starting initial sync.")
+        _try_start_sync()
+
+    yield
+
+
+app = FastAPI(title="Jira Support Sync", version="1.3.0", lifespan=lifespan)
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("index.html", {"request": request})
@@ -258,10 +283,21 @@ def sync_status() -> Dict[str, Any]:
 
 @app.get("/stats/overview")
 def stats_overview() -> Dict[str, Any]:
-    settings = load_settings()
-    db_path = settings.sqlite_path
+    db_path = get_sqlite_path()
     now = datetime.now(timezone.utc)
     closed_norm = _get_closed_statuses_normalized()
+
+    if not _issues_table_exists(db_path):
+        return {
+            "total_tickets": 0,
+            "open_tickets": 0,
+            "closed_tickets": 0,
+            "tickets_by_status": {},
+            "tickets_by_priority": {},
+            "oldest_open_ticket": None,
+            "oldest_open_ticket_by_updated": None,
+            "newest_ticket": None,
+        }
 
     with _connect_sqlite(db_path) as conn:
         total_tickets = int(conn.execute("SELECT COUNT(*) AS c FROM issues").fetchone()["c"])
@@ -365,10 +401,12 @@ def stats_overview() -> Dict[str, Any]:
 def stats_by_assignee(
     only_open: bool = Query(True, description="If true, only considers open tickets for counts/ages and filters out assignees with 0 open tickets."),
 ) -> List[Dict[str, Any]]:
-    settings = load_settings()
-    db_path = settings.sqlite_path
+    db_path = get_sqlite_path()
     now = datetime.now(timezone.utc)
     closed_norm = _get_closed_statuses_normalized()
+
+    if not _issues_table_exists(db_path):
+        return []
 
     agg: Dict[str, Dict[str, Any]] = {}
 
@@ -431,10 +469,12 @@ def stats_top_oldest_open(
     limit: int = Query(10, ge=1, le=200),
     sort: str = Query("created", pattern="^(created|updated)$"),
 ) -> List[Dict[str, Any]]:
-    settings = load_settings()
-    db_path = settings.sqlite_path
+    db_path = get_sqlite_path()
     now = datetime.now(timezone.utc)
     closed_norm = _get_closed_statuses_normalized()
+
+    if not _issues_table_exists(db_path):
+        return []
 
     with _connect_sqlite(db_path) as conn:
         rows = conn.execute(
@@ -471,19 +511,13 @@ def stats_top_oldest_open(
     return items[:limit]
 
 
-# ----------------------------
-# NEW: Time spent by project
-# ----------------------------
 @app.get("/stats/time_by_project")
 def stats_time_by_project() -> List[Dict[str, Any]]:
-    """
-    Group issues by project_key and sum logged time (time_spent_seconds).
-    Split open/closed using the same closed-status normalization.
-    SQLite only (no Jira calls).
-    """
-    settings = load_settings()
-    db_path = settings.sqlite_path
+    db_path = get_sqlite_path()
     closed_norm = _get_closed_statuses_normalized()
+
+    if not _issues_table_exists(db_path):
+        return []
 
     agg: Dict[str, Dict[str, Any]] = {}
 
