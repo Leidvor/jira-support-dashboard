@@ -45,3 +45,5 @@ dist/
 node_modules/
 
 *.spec
+*.zip
+dist/

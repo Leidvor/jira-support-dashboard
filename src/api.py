@@ -20,6 +20,7 @@ from .config import get_sqlite_path, load_settings
 from .db import IssuesRepository
 from .jira_client import JiraClient
 from .sync import run_sync
+from fastapi.staticfiles import StaticFiles
 
 if getattr(sys, "frozen", False):
     BASE_DIR = sys._MEIPASS
@@ -60,6 +61,8 @@ _last_status: Dict[str, Any] = {
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
 DEFAULT_CLOSED_STATUSES = [
     "fermé",
     "fermée",
@@ -71,6 +74,62 @@ DEFAULT_CLOSED_STATUSES = [
     "resolved",
     "done",
 ]
+
+
+STATUS_FAMILY_LABELS = [
+    "Open",
+    "Analyse Client",
+    "Analyse Luxtrust",
+    "Closed",
+]
+
+
+STATUS_FAMILY_MAP: Dict[str, str] = {
+    "declared": "Open",
+    "reopened": "Open",
+    "reopen": "Open",
+    "re opened": "Open",
+    "rouvert": "Open",
+    "ouvert": "Open",
+    "started": "Open",
+    "planned": "Open",
+    "planne": "Open",
+    "prevu": "Open",
+
+    "no customer answer": "Analyse Client",
+    "waiting for customer": "Analyse Client",
+    "en attente du client": "Analyse Client",
+    "analyse client": "Analyse Client",
+
+    "escalated": "Analyse Luxtrust",
+    "in progress": "Analyse Luxtrust",
+    "estimated lt": "Analyse Luxtrust",
+    "new release": "Analyse Luxtrust",
+    "work in progress": "Analyse Luxtrust",
+    "to plan": "Analyse Luxtrust",
+    "to analyse lt": "Analyse Luxtrust",
+    "to analyse it": "Analyse Luxtrust",
+    "pending": "Analyse Luxtrust",
+    "test": "Analyse Luxtrust",
+    "quote": "Analyse Luxtrust",
+    "analyse luxtrust": "Analyse Luxtrust",
+    "en cours": "Analyse Luxtrust",
+
+    "done": "Closed",
+    "pre completed": "Closed",
+    "cancelled": "Closed",
+    "canceled": "Closed",
+    "annule": "Closed",
+    "rejected": "Closed",
+    "rejete": "Closed",
+    "suspended": "Closed",
+    "published": "Closed",
+    "ferme": "Closed",
+    "closed": "Closed",
+    "resolu": "Closed",
+    "termine": "Closed",
+    "termine e": "Closed",
+}
 
 
 def _set_status(**updates: Any) -> None:
@@ -165,6 +224,53 @@ def _normalize_for_match(value: Optional[str]) -> str:
     s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
     return s.lower().strip()
+
+
+def _normalize_status_key(value: Optional[str]) -> str:
+    s = _normalize_for_match(value)
+    for ch in ["_", "-", "/", "(", ")", "[", "]", "{", "}", ".", ",", ";", ":"]:
+        s = s.replace(ch, " ")
+    s = " ".join(s.split())
+    return s
+
+
+def _display_status_label(value: Optional[str]) -> str:
+    raw = (value or "").strip()
+    return raw if raw else "UNKNOWN"
+
+
+def _map_status_to_family(value: Optional[str]) -> str:
+    raw_label = _display_status_label(value)
+    key = _normalize_status_key(value)
+
+    if key in STATUS_FAMILY_MAP:
+        return STATUS_FAMILY_MAP[key]
+
+    if "customer" in key or "client" in key:
+        return "Analyse Client"
+
+    if "luxtrust" in key or "support" in key:
+        return "Analyse Luxtrust"
+
+    if "progress" in key or "analyse" in key or "analysis" in key:
+        return "Analyse Luxtrust"
+
+    if "pending" in key or "quote" in key or "release" in key or "test" in key:
+        return "Analyse Luxtrust"
+
+    if "plan" in key:
+        return "Analyse Luxtrust"
+
+    if "open" in key or "ouvert" in key or "reopen" in key or "rouvert" in key or "declared" in key or "start" in key or "prevu" in key:
+        return "Open"
+
+    if "closed" in key or "done" in key or "reject" in key or "rejete" in key or "cancel" in key or "annule" in key or "publish" in key or "suspend" in key:
+        return "Closed"
+
+    if "ferme" in key or "resolu" in key or "termine" in key:
+        return "Closed"
+
+    return f"Other: {raw_label}"
 
 
 def _get_closed_statuses_normalized() -> set[str]:
@@ -263,7 +369,10 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Jira Support Sync", version="1.3.0", lifespan=lifespan)
+app = FastAPI(title="Jira Support Sync", version="1.4.0", lifespan=lifespan)
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -293,7 +402,7 @@ def config_info() -> Dict[str, Any]:
         settings = load_settings()
         jql = settings.jql
         page_size = settings.page_size
-    except Exception as e:
+    except Exception:
         jql = None
         page_size = None
 
@@ -302,6 +411,8 @@ def config_info() -> Dict[str, Any]:
         "jira_jql": jql,
         "jira_page_size": page_size,
         "closed_statuses": closed_statuses,
+        "status_family_map": STATUS_FAMILY_MAP,
+        "status_family_labels": STATUS_FAMILY_LABELS,
     }
 
 
@@ -597,3 +708,61 @@ def stats_time_by_project() -> List[Dict[str, Any]]:
 
     out.sort(key=lambda x: x["time_spent_seconds"], reverse=True)
     return out
+
+
+@app.get("/stats/status_family_distribution")
+def stats_status_family_distribution() -> Dict[str, Any]:
+    db_path = get_sqlite_path()
+
+    if not _issues_table_exists(db_path):
+        return {
+            "total_tickets": 0,
+            "families": [],
+            "known_families": STATUS_FAMILY_LABELS,
+        }
+
+    family_counts: Dict[str, int] = {}
+    raw_status_counts: Dict[str, int] = {}
+
+    with _connect_sqlite(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT status
+            FROM issues
+            """
+        ).fetchall()
+
+    total = 0
+    for row in rows:
+        status = row["status"]
+        raw_label = _display_status_label(status)
+        family = _map_status_to_family(status)
+
+        total += 1
+        raw_status_counts[raw_label] = raw_status_counts.get(raw_label, 0) + 1
+        family_counts[family] = family_counts.get(family, 0) + 1
+
+    ordered_labels = STATUS_FAMILY_LABELS[:]
+    other_labels = sorted([label for label in family_counts.keys() if label not in STATUS_FAMILY_LABELS], key=str.lower)
+    final_labels = ordered_labels + other_labels
+
+    families: List[Dict[str, Any]] = []
+    for label in final_labels:
+        count = int(family_counts.get(label, 0))
+        if count <= 0:
+            continue
+        pct = round((count / total) * 100.0, 1) if total > 0 else 0.0
+        families.append(
+            {
+                "label": label,
+                "count": count,
+                "percentage": pct,
+            }
+        )
+
+    return {
+        "total_tickets": total,
+        "families": families,
+        "known_families": STATUS_FAMILY_LABELS,
+        "raw_status_counts": raw_status_counts,
+    }

@@ -10,4 +10,4 @@ pyinstaller --onefile --name jira-support-dashboard `
 --hidden-import src.sync `
 launcher.py
 
-Copy-Item .\.env .\dist\.env
+Copy-Item .\.env.example .\dist\.env
