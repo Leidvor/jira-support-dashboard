@@ -6,6 +6,7 @@ const syncText = document.getElementById("syncText");
 const syncMeta = document.getElementById("syncMeta");
 const errorLine = document.getElementById("errorLine");
 const toggleClosed = document.getElementById("toggleClosed");
+const themeToggleBtn = document.getElementById("themeToggleBtn");
 
 const runtimeLine = document.getElementById("runtimeLine");
 const syncErrorText = document.getElementById("syncErrorText");
@@ -42,6 +43,75 @@ let liveRefreshIntervalMs = 4000;
 let lastRenderedLiveSignature = "";
 let dashboardConfig = null;
 let lastSyncStatus = null;
+
+const THEME_STORAGE_KEY = "dashboard-theme";
+const THEME_EXEC = "exec";
+const THEME_TECH = "tech";
+
+function getCurrentTheme() {
+  return document.body.classList.contains("theme-exec")
+    ? THEME_EXEC
+    : THEME_TECH;
+}
+
+function updateThemeToggleLabel() {
+  if (!themeToggleBtn) return;
+
+  const currentTheme = getCurrentTheme();
+
+  if (currentTheme === THEME_EXEC) {
+    themeToggleBtn.textContent = "Technical view";
+    themeToggleBtn.title = "Switch to technical dark theme";
+  } else {
+    themeToggleBtn.textContent = "Executive view";
+    themeToggleBtn.title = "Switch to executive light theme";
+  }
+}
+
+function applyTheme(theme, persist = true) {
+  const normalized = theme === THEME_EXEC ? THEME_EXEC : THEME_TECH;
+
+  document.body.classList.toggle("theme-exec", normalized === THEME_EXEC);
+
+  updateThemeToggleLabel();
+
+  if (persist) {
+    localStorage.setItem(THEME_STORAGE_KEY, normalized);
+  }
+
+  try {
+    if (statusChartRendered) {
+      renderStatusFamilyChart({
+        families: Array.isArray(window.__lastStatusFamilies)
+          ? window.__lastStatusFamilies
+          : [],
+      });
+    }
+  } catch (e) {
+    console.error("Failed to refresh chart after theme switch", e);
+  }
+
+  requestAnimationFrame(() => updateScrollableCue(timeByProjectWrap));
+}
+
+function loadSavedTheme() {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+
+  if (saved === THEME_EXEC || saved === THEME_TECH) {
+    applyTheme(saved, false);
+    return;
+  }
+
+  applyTheme(
+    document.body.classList.contains("theme-exec") ? THEME_EXEC : THEME_TECH,
+    false,
+  );
+}
+
+function toggleTheme() {
+  const nextTheme = getCurrentTheme() === THEME_EXEC ? THEME_TECH : THEME_EXEC;
+  applyTheme(nextTheme, true);
+}
 
 function fmtInt(n) {
   if (n === null || n === undefined) return "—";
@@ -315,6 +385,10 @@ function getStatusFamilyColor(label, index) {
 }
 
 function renderStatusFamilyChart(data) {
+  window.__lastStatusFamilies = Array.isArray(data?.families)
+    ? data.families
+    : [];
+
   let families = Array.isArray(data?.families) ? data.families : [];
 
   if (!toggleClosed.checked) {
@@ -323,7 +397,7 @@ function renderStatusFamilyChart(data) {
 
   const total = families.reduce((sum, f) => sum + Number(f.count || 0), 0);
 
-  statusFamilyMeta.textContent = `${fmtInt(total)} tickets • ${fmtInt(families.length)} groups`;
+  statusFamilyMeta.textContent = `${fmtInt(total)} tickets • ${fmtInt(families.length)} statuses`;
 
   if (!families.length || total <= 0) {
     if (statusChartRendered) {
@@ -334,12 +408,19 @@ function renderStatusFamilyChart(data) {
     }
 
     statusFamilyChart.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;height:220px;color:#9ca3af;">
+      <div style="display:flex;align-items:center;justify-content:center;height:220px;color:#667085;">
         No data
       </div>
     `;
     return;
   }
+
+  const isExecTheme = document.body.classList.contains("theme-exec");
+  const defaultTextColor = isExecTheme ? "#334155" : "#e5e7eb";
+  const tooltipBg = isExecTheme ? "#ffffff" : "#111827";
+  const tooltipBorder = isExecTheme ? "#d9e2ef" : "#273244";
+  const tooltipText = isExecTheme ? "#142033" : "#e5e7eb";
+  const sliceBorder = isExecTheme ? "#ffffff" : "#2a303b";
 
   const series = families.map((item, index) => {
     const count = Number(item.count || 0);
@@ -361,10 +442,10 @@ function renderStatusFamilyChart(data) {
       },
       tooltip: {
         text: `${item.label}: ${fmtInt(count)} tickets (${pct.toFixed(1)}%)`,
-        backgroundColor: "#111827",
-        borderColor: "#273244",
+        backgroundColor: tooltipBg,
+        borderColor: tooltipBorder,
         borderWidth: 1,
-        color: "#e5e7eb",
+        color: tooltipText,
       },
     };
   });
@@ -373,7 +454,7 @@ function renderStatusFamilyChart(data) {
     type: "pie",
     backgroundColor: "transparent",
     plot: {
-      borderColor: "#2a303b",
+      borderColor: sliceBorder,
       borderWidth: 3,
       slice: 64,
       size: "70%",
@@ -384,7 +465,7 @@ function renderStatusFamilyChart(data) {
         fontFamily: "Arial",
         fontSize: 12,
         fontWeight: "bold",
-        color: "#e5e7eb",
+        color: defaultTextColor,
       },
       tooltip: {
         fontSize: 11,
@@ -769,6 +850,12 @@ async function refreshDashboard() {
   }
 }
 
+if (themeToggleBtn) {
+  themeToggleBtn.addEventListener("click", () => {
+    toggleTheme();
+  });
+}
+
 syncBtn.addEventListener("click", async () => {
   syncBtn.disabled = true;
   syncBtn.textContent = "Starting…";
@@ -792,6 +879,8 @@ toggleClosed.addEventListener("change", () => {
 });
 
 async function bootstrapDashboard() {
+  loadSavedTheme();
+
   try {
     dashboardConfig = await fetchJson("/config");
     startAutoRefresh(dashboardConfig.auto_refresh_seconds);

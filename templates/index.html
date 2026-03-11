@@ -6,7 +6,7 @@
     <title>Support Monitoring Dashboard</title>
     <link rel="stylesheet" href="/static/css/dashboard.css" />
   </head>
-  <body>
+  <body class="theme-exec">
     <div class="page">
       <div class="header">
         <div class="brand">
@@ -18,7 +18,12 @@
         </div>
 
         <div class="header-right">
-          <button id="syncBtn" class="btn">Sync Jira</button>
+          <div class="header-actions">
+            <button id="themeToggleBtn" class="btn btn-secondary">
+              Executive view
+            </button>
+            <button id="syncBtn" class="btn">Sync Jira</button>
+          </div>
 
           <div
             id="syncPill"
