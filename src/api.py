@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from collections import deque
+from urllib.parse import quote_plus
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -19,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from .config import get_sqlite_path, load_settings
+from .config import get_sqlite_path, load_settings, split_jql_order_by
 from .db import IssuesRepository
 from .jira_client import JiraClient
 from .sync import run_sync
@@ -85,63 +86,97 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-STATUS_FAMILY_LABELS = [
-    "Open",
-    "Analyse Client",
-    "Analyse Luxtrust",
-    "Closed",
-]
+STATUS_FAMILIES = {
+    "Open": {
+        "order": 0,
+        "statuses": [
+            "declared",
+            "reopened",
+            "reopen",
+            "re opened",
+            "rouvert",
+            "ouvert",
+            "started",
+            "planned",
+            "planne",
+            "prevu",
+        ],
+    },
 
-STATUS_FAMILY_MAP: Dict[str, str] = {
-    "declared": "Open",
-    "reopened": "Open",
-    "reopen": "Open",
-    "re opened": "Open",
-    "rouvert": "Open",
-    "ouvert": "Open",
-    "started": "Open",
-    "planned": "Open",
-    "planne": "Open",
-    "prevu": "Open",
-    "no customer answer": "Analyse Client",
-    "waiting for customer": "Analyse Client",
-    "en attente du client": "Analyse Client",
-    "analyse client": "Analyse Client",
-    "escalated": "Analyse Luxtrust",
-    "in progress": "Analyse Luxtrust",
-    "estimated lt": "Analyse Luxtrust",
-    "new release": "Analyse Luxtrust",
-    "work in progress": "Analyse Luxtrust",
-    "to plan": "Analyse Luxtrust",
-    "to analyse lt": "Analyse Luxtrust",
-    "to analyse it": "Analyse Luxtrust",
-    "pending": "Analyse Luxtrust",
-    "test": "Analyse Luxtrust",
-    "quote": "Analyse Luxtrust",
-    "analyse luxtrust": "Analyse Luxtrust",
-    "en cours": "Analyse Luxtrust",
-    "done": "Closed",
-    "pre completed": "Closed",
-    "cancelled": "Closed",
-    "canceled": "Closed",
-    "annule": "Closed",
-    "rejected": "Closed",
-    "rejete": "Closed",
-    "suspended": "Closed",
-    "published": "Closed",
-    "ferme": "Closed",
-    "closed": "Closed",
-    "resolu": "Closed",
-    "termine": "Closed",
-    "termine(e)": "Closed",
+    "Analyse Client": {
+        "order": 1,
+        "statuses": [
+            "no customer answer",
+            "waiting for customer",
+            "en attente du client",
+            "analyse client",
+        ],
+    },
+
+    "Analyse Luxtrust": {
+        "order": 2,
+        "statuses": [
+            "escalated",
+            "in progress",
+            "estimated lt",
+            "new release",
+            "work in progress",
+            "to plan",
+            "to analyse lt",
+            "to analyse it",
+            "pending",
+            "test",
+            "quote",
+            "analyse luxtrust",
+            "en cours",
+        ],
+    },
+
+    "Closed": {
+        "order": 3,
+        "statuses": [
+            "done",
+            "pre completed",
+            "cancelled",
+            "canceled",
+            "annule",
+            "rejected",
+            "rejete",
+            "suspended",
+            "published",
+            "ferme",
+            "closed",
+            "resolu",
+            "termine",
+            "termine(e)",
+        ],
+        "jira": [
+            "Canceled",
+            "Closed",
+            "Done",
+            "PUBLISHED",
+            "Pre Completed",
+            "REJECTED",
+            "Resolved",
+            "Suspended",
+        ],
+    },
 }
+
+STATUS_FAMILY_LABELS = list(STATUS_FAMILIES.keys())
 
 STATUS_FAMILY_ORDER = {
-    "Open": 0,
-    "Analyse Client": 1,
-    "Analyse Luxtrust": 2,
-    "Closed": 3,
+    name: cfg["order"]
+    for name, cfg in STATUS_FAMILIES.items()
 }
+
+STATUS_FAMILY_MAP = {
+    status: family
+    for family, cfg in STATUS_FAMILIES.items()
+    for status in cfg["statuses"]
+}
+
+JIRA_CLOSED_STATUSES_JQL = STATUS_FAMILIES["Closed"]["jira"]
 
 
 def _set_status(**updates: Any) -> None:
@@ -409,7 +444,64 @@ def _issues_table_exists(path: str) -> bool:
             return row is not None
     except Exception:
         return False
+    
+def _get_closed_status_labels_from_db(path: str) -> List[str]:
+    if not _issues_table_exists(path):
+        return []
 
+    labels: List[str] = []
+
+    with _connect_sqlite(path) as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT status
+            FROM issues
+            WHERE status IS NOT NULL AND TRIM(status) <> ''
+            """
+        ).fetchall()
+
+    for row in rows:
+        raw_status = str(row["status"]).strip()
+        if _map_status_to_family(raw_status) == "Closed":
+            labels.append(raw_status)
+
+    labels = sorted(set(labels), key=str.lower)
+    return labels
+
+def _escape_jql_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _build_jira_issue_search_url(
+    base_url: str,
+    base_jql: str,
+    assignee: Optional[str] = None,
+    only_open: bool = True,
+) -> str:
+    filter_part, order_part = split_jql_order_by(base_jql)
+
+    clauses: List[str] = [f"({filter_part})"]
+
+    if only_open and JIRA_CLOSED_STATUSES_JQL:
+        closed_list = ", ".join(
+            f'"{_escape_jql_string(s)}"' for s in JIRA_CLOSED_STATUSES_JQL
+        )
+        clauses.append(f"status NOT IN ({closed_list})")
+
+    if assignee is not None:
+        label = assignee.strip()
+        if not label or label.lower() == "unassigned":
+            clauses.append("assignee is EMPTY")
+        else:
+            clauses.append(f'assignee = "{_escape_jql_string(label)}"')
+
+    final_jql = " AND ".join(clauses)
+
+    if order_part:
+        final_jql = f"{final_jql} {order_part}"
+
+    encoded_jql = quote_plus(final_jql)
+    return f"{base_url}/issues/?jql={encoded_jql}"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -488,12 +580,15 @@ def config_info() -> Dict[str, Any]:
         settings = load_settings()
         jql = settings.jql
         page_size = settings.page_size
+        jira_base_url = settings.jira_base_url
     except Exception:
         jql = None
         page_size = None
+        jira_base_url = None
 
     return {
         "sqlite_path": db_path,
+        "jira_base_url": jira_base_url,
         "jira_jql": jql,
         "jira_page_size": page_size,
         "closed_status_keys": closed_statuses,
@@ -884,3 +979,19 @@ def stats_status_family_distribution() -> Dict[str, Any]:
         "raw_status_counts": raw_status_counts,
         "raw_status_items": raw_status_items,
     }
+    
+@app.get("/jira/search_link")
+def jira_search_link(
+    assignee: Optional[str] = Query(None),
+    only_open: bool = Query(True),
+) -> Dict[str, Any]:
+    settings = load_settings()
+
+    url = _build_jira_issue_search_url(
+        base_url=settings.jira_base_url,
+        base_jql=settings.jql,
+        assignee=assignee,
+        only_open=only_open,
+    )
+
+    return {"url": url}

@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from dataclasses import dataclass
 from dotenv import load_dotenv
@@ -39,13 +40,37 @@ def get_sqlite_path() -> str:
     return os.path.join(_get_runtime_dir(), "jira_issues.db")
 
 
+def split_jql_order_by(jql: str) -> tuple[str, str]:
+    raw = (jql or "").strip()
+    if not raw:
+        raise RuntimeError("JIRA_JQL cannot be empty")
+
+    match = re.search(r"\border\s+by\b", raw, flags=re.IGNORECASE)
+    if not match:
+        return raw, ""
+
+    idx = match.start()
+    filter_part = raw[:idx].strip()
+    order_part = raw[idx:].strip()
+    return filter_part, order_part
+
+
+def build_effective_jql(base_jql: str) -> str:
+    filter_part, order_part = split_jql_order_by(base_jql)
+
+    effective = f"({filter_part}) AND issuetype != Epic"
+    if order_part:
+        effective = f"{effective} {order_part}"
+
+    return effective
+
+
 def load_settings() -> Settings:
     jira_base_url = _require_env("JIRA_BASE_URL").rstrip("/")
     jira_email = _require_env("JIRA_EMAIL")
     jira_api_token = _require_env("JIRA_API_TOKEN")
-    jql = _require_env("JIRA_JQL")
-
-    print("JQL USED:", jql)
+    raw_jql = _require_env("JIRA_JQL")
+    jql = build_effective_jql(raw_jql)
 
     page_size_raw = os.getenv("JIRA_PAGE_SIZE", "100").strip()
     auto_sync_interval_raw = os.getenv("AUTO_SYNC_INTERVAL_SECONDS", "120").strip()

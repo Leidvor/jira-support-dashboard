@@ -22,6 +22,7 @@ const kpiOldestUpdated = document.getElementById("kpiOldestUpdated");
 const kpiOldestUpdatedHint = document.getElementById("kpiOldestUpdatedHint");
 
 const assigneeBody = document.getElementById("assigneeBody");
+const assigneePanelTitle = document.getElementById("assigneePanelTitle");
 const oldestBody = document.getElementById("oldestBody");
 const assigneeMeta = document.getElementById("assigneeMeta");
 const timeByProjectBody = document.getElementById("timeByProjectBody");
@@ -210,6 +211,30 @@ async function fetchSyncStatus() {
 
 async function fetchSyncLive() {
   return fetchJson("/sync/live?limit=3");
+}
+
+async function fetchJiraSearchLink({ assignee = null, onlyOpen = true } = {}) {
+  const params = new URLSearchParams();
+
+  if (assignee !== null && assignee !== undefined) {
+    params.set("assignee", assignee);
+  }
+
+  params.set("only_open", onlyOpen ? "true" : "false");
+
+  return fetchJson(`/jira/search_link?${params.toString()}`);
+}
+
+async function openJiraSearch({ assignee = null, onlyOpen = true } = {}) {
+  try {
+    const data = await fetchJiraSearchLink({ assignee, onlyOpen });
+    if (data?.url) {
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  } catch (e) {
+    console.error("Failed to open Jira search link", e);
+    showError(`Failed to open Jira link: ${e}`);
+  }
 }
 
 async function triggerSync() {
@@ -680,6 +705,17 @@ async function refreshDashboard() {
     } else {
       for (const row of topAssignees) {
         const tr = document.createElement("tr");
+        tr.classList.add("clickable-row");
+        tr.title = isUnassigned(row.assignee)
+          ? "Open unassigned open tickets in Jira"
+          : `Open ${row.assignee} open tickets in Jira`;
+
+        tr.addEventListener("click", async () => {
+          await openJiraSearch({
+            assignee: isUnassigned(row.assignee) ? "Unassigned" : row.assignee,
+            onlyOpen: true,
+          });
+        });
 
         const tdA = document.createElement("td");
         tdA.className = "truncate";
@@ -877,6 +913,12 @@ window.addEventListener("resize", () => {
 toggleClosed.addEventListener("change", () => {
   refreshDashboard();
 });
+
+if (assigneePanelTitle) {
+  assigneePanelTitle.addEventListener("click", async () => {
+    await openJiraSearch({ assignee: null, onlyOpen: true });
+  });
+}
 
 async function bootstrapDashboard() {
   loadSavedTheme();
