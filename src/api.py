@@ -133,7 +133,7 @@ STATUS_FAMILY_MAP: Dict[str, str] = {
     "closed": "Closed",
     "resolu": "Closed",
     "termine": "Closed",
-    "termine e": "Closed",
+    "termine(e)": "Closed",
 }
 
 STATUS_FAMILY_ORDER = {
