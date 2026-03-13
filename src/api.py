@@ -3,15 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import sqlite3
 import sys
 import threading
 import time
-import unicodedata
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from collections import deque
 from urllib.parse import quote_plus
 
 from fastapi import FastAPI, HTTPException, Query
@@ -20,10 +18,28 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
+from .clients.api import router as clients_router
 from .config import get_sqlite_path, load_settings, split_jql_order_by
 from .db import IssuesRepository
 from .jira_client import JiraClient
 from .sync import run_sync
+from .utils import (
+    JIRA_CLOSED_STATUSES_JQL,
+    STATUS_FAMILIES,
+    STATUS_FAMILY_LABELS,
+    STATUS_FAMILY_MAP,
+    _age_hours,
+    _assignee_label,
+    _connect_sqlite,
+    _display_status_label,
+    _duration_hours,
+    _hours_from_seconds,
+    _is_closed_status,
+    _issues_table_exists,
+    _map_status_to_family,
+    _parse_jira_dt,
+    _status_sort_key,
+)
 
 if getattr(sys, "frozen", False):
     BASE_DIR = sys._MEIPASS
@@ -40,7 +56,10 @@ os.makedirs(LOG_DIR, exist_ok=True)
 logger = logging.getLogger("jira_sync_api")
 logger.setLevel(logging.INFO)
 
-if not any(isinstance(h, logging.FileHandler) and h.baseFilename == os.path.abspath(LOG_PATH) for h in logger.handlers):
+if not any(
+    isinstance(h, logging.FileHandler) and h.baseFilename == os.path.abspath(LOG_PATH)
+    for h in logger.handlers
+):
     file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
     formatter = logging.Formatter(
         fmt="%(asctime)s %(levelname)s %(message)s",
@@ -48,6 +67,7 @@ if not any(isinstance(h, logging.FileHandler) and h.baseFilename == os.path.absp
     )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+
 
 class InMemoryLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
@@ -86,98 +106,6 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-STATUS_FAMILIES = {
-    "Open": {
-        "order": 0,
-        "statuses": [
-            "declared",
-            "reopened",
-            "reopen",
-            "re opened",
-            "rouvert",
-            "ouvert",
-            "started",
-            "planned",
-            "planne",
-            "prevu",
-        ],
-    },
-
-    "Analyse Client": {
-        "order": 1,
-        "statuses": [
-            "no customer answer",
-            "waiting for customer",
-            "en attente du client",
-            "analyse client",
-        ],
-    },
-
-    "Analyse Luxtrust": {
-        "order": 2,
-        "statuses": [
-            "escalated",
-            "in progress",
-            "estimated lt",
-            "new release",
-            "work in progress",
-            "to plan",
-            "to analyse lt",
-            "to analyse it",
-            "pending",
-            "test",
-            "quote",
-            "analyse luxtrust",
-            "en cours",
-        ],
-    },
-
-    "Closed": {
-        "order": 3,
-        "statuses": [
-            "done",
-            "pre completed",
-            "cancelled",
-            "canceled",
-            "annule",
-            "rejected",
-            "rejete",
-            "suspended",
-            "published",
-            "ferme",
-            "closed",
-            "resolu",
-            "termine",
-            "termine(e)",
-        ],
-        "jira": [
-            "Canceled",
-            "Closed",
-            "Done",
-            "PUBLISHED",
-            "Pre Completed",
-            "REJECTED",
-            "Resolved",
-            "Suspended",
-        ],
-    },
-}
-
-STATUS_FAMILY_LABELS = list(STATUS_FAMILIES.keys())
-
-STATUS_FAMILY_ORDER = {
-    name: cfg["order"]
-    for name, cfg in STATUS_FAMILIES.items()
-}
-
-STATUS_FAMILY_MAP = {
-    status: family
-    for family, cfg in STATUS_FAMILIES.items()
-    for status in cfg["statuses"]
-}
-
-JIRA_CLOSED_STATUSES_JQL = STATUS_FAMILIES["Closed"]["jira"]
-
 
 def _set_status(**updates: Any) -> None:
     global _last_status
@@ -202,7 +130,7 @@ def _get_live_logs(limit: int = 4) -> List[str]:
         if limit <= 0:
             return []
         return list(_live_log_lines)[-limit:]
-    
+
 
 def _run_sync_job() -> None:
     global _is_running
@@ -304,147 +232,6 @@ async def _auto_sync_loop() -> None:
             logger.exception("Auto-sync trigger failed: %s", e)
 
 
-def _normalize_for_match(value: Optional[str]) -> str:
-    if not value:
-        return ""
-    s = value.strip()
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return s.lower().strip()
-
-
-def _normalize_status_key(value: Optional[str]) -> str:
-    s = _normalize_for_match(value)
-    for ch in ["_", "-", "/", "(", ")", "[", "]", "{", "}", ".", ",", ";", ":"]:
-        s = s.replace(ch, " ")
-    s = " ".join(s.split())
-    return s
-
-
-def _display_status_label(value: Optional[str]) -> str:
-    raw = (value or "").strip()
-    return raw if raw else "UNKNOWN"
-
-
-def _map_status_to_family(value: Optional[str]) -> str:
-    raw_label = _display_status_label(value)
-    key = _normalize_status_key(value)
-
-    if key in STATUS_FAMILY_MAP:
-        return STATUS_FAMILY_MAP[key]
-
-    if "customer" in key or "client" in key:
-        return "Analyse Client"
-
-    if "luxtrust" in key or "support" in key:
-        return "Analyse Luxtrust"
-
-    if "progress" in key or "analyse" in key or "analysis" in key:
-        return "Analyse Luxtrust"
-
-    if "pending" in key or "quote" in key or "release" in key or "test" in key:
-        return "Analyse Luxtrust"
-
-    if "plan" in key:
-        return "Analyse Luxtrust"
-
-    if "open" in key or "ouvert" in key or "reopen" in key or "rouvert" in key or "declared" in key or "start" in key or "prevu" in key:
-        return "Open"
-
-    if "closed" in key or "done" in key or "reject" in key or "rejete" in key or "cancel" in key or "annule" in key or "publish" in key or "suspend" in key:
-        return "Closed"
-
-    if "ferme" in key or "resolu" in key or "termine" in key:
-        return "Closed"
-
-    return f"Other: {raw_label}"
-
-
-def _status_family_rank(family: str) -> int:
-    return STATUS_FAMILY_ORDER.get(family, 999)
-
-
-def _status_sort_key(status_value: Optional[str]) -> tuple[int, str, str]:
-    raw_label = _display_status_label(status_value)
-    family = _map_status_to_family(status_value)
-    return (
-        _status_family_rank(family),
-        family.lower(),
-        raw_label.lower(),
-    )
-    
-
-def _parse_jira_dt(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    s = value.strip()
-    try:
-        if s.endswith("Z"):
-            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        else:
-            if len(s) >= 5 and (s[-5] in ["+", "-"]) and s[-2] != ":":
-                s = s[:-2] + ":" + s[-2:]
-            dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except Exception:
-        return None
-
-
-def _age_hours(now_utc: datetime, then_utc: datetime) -> int:
-    seconds = (now_utc - then_utc).total_seconds()
-    if seconds < 0:
-        seconds = 0
-    return int(seconds // 3600)
-
-
-def _duration_hours(start_utc: datetime, end_utc: datetime) -> float:
-    seconds = (end_utc - start_utc).total_seconds()
-    if seconds < 0:
-        return 0.0
-    return float(seconds) / 3600.0
-
-
-def _connect_sqlite(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _assignee_label(value: Optional[str]) -> str:
-    return value if value and value.strip() else "Unassigned"
-
-
-def _is_closed_status(status_value: Optional[str]) -> bool:
-    return _map_status_to_family(status_value) == "Closed"
-
-
-def _hours_from_seconds(seconds: Optional[int]) -> float:
-    if seconds is None:
-        return 0.0
-    try:
-        return float(seconds) / 3600.0
-    except Exception:
-        return 0.0
-
-
-def _issues_table_exists(path: str) -> bool:
-    if not os.path.exists(path):
-        return False
-    try:
-        with sqlite3.connect(path) as conn:
-            row = conn.execute(
-                """
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table' AND name = 'issues'
-                """
-            ).fetchone()
-            return row is not None
-    except Exception:
-        return False
-    
 def _get_closed_status_labels_from_db(path: str) -> List[str]:
     if not _issues_table_exists(path):
         return []
@@ -467,6 +254,7 @@ def _get_closed_status_labels_from_db(path: str) -> List[str]:
 
     labels = sorted(set(labels), key=str.lower)
     return labels
+
 
 def _escape_jql_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
@@ -503,6 +291,7 @@ def _build_jira_issue_search_url(
     encoded_jql = quote_plus(final_jql)
     return f"{base_url}/issues/?jql={encoded_jql}"
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db_path = get_sqlite_path()
@@ -536,6 +325,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Jira Support Sync", version="1.6.0", lifespan=lifespan)
 
+app.include_router(clients_router)
+
 if os.path.isdir(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -549,7 +340,10 @@ def home(request: Request) -> HTMLResponse:
 def trigger_sync() -> Dict[str, Any]:
     started = _try_start_sync()
     if not started:
-        raise HTTPException(status_code=409, detail="A sync is already running. Please wait for it to finish.")
+        raise HTTPException(
+            status_code=409,
+            detail="A sync is already running. Please wait for it to finish.",
+        )
     return {"message": "Sync started", "status": _get_status()}
 
 
@@ -594,6 +388,7 @@ def config_info() -> Dict[str, Any]:
         "closed_status_keys": closed_statuses,
         "status_family_map": STATUS_FAMILY_MAP,
         "status_family_labels": STATUS_FAMILY_LABELS,
+        "status_families": STATUS_FAMILIES,
         "auto_sync_interval_seconds": SYNC_INTERVAL_SECONDS,
         "auto_refresh_seconds": REFRESH_INTERVAL_SECONDS,
     }
@@ -673,7 +468,10 @@ def stats_overview() -> Dict[str, Any]:
 
         oldest_open_ticket: Optional[Dict[str, Any]] = None
         if oldest_open_key and oldest_open_created:
-            oldest_open_ticket = {"key": oldest_open_key, "age_hours": _age_hours(now, oldest_open_created)}
+            oldest_open_ticket = {
+                "key": oldest_open_key,
+                "age_hours": _age_hours(now, oldest_open_created),
+            }
 
         oldest_open_ticket_by_updated: Optional[Dict[str, Any]] = None
         if oldest_open_by_updated_key and oldest_open_updated:
@@ -700,7 +498,10 @@ def stats_overview() -> Dict[str, Any]:
 
         newest_ticket: Optional[Dict[str, Any]] = None
         if newest_key and newest_created:
-            newest_ticket = {"key": newest_key, "age_hours": _age_hours(now, newest_created)}
+            newest_ticket = {
+                "key": newest_key,
+                "age_hours": _age_hours(now, newest_created),
+            }
 
     return {
         "total_tickets": total_tickets,
@@ -716,7 +517,10 @@ def stats_overview() -> Dict[str, Any]:
 
 @app.get("/stats/by_assignee")
 def stats_by_assignee(
-    only_open: bool = Query(True, description="If true, only considers open tickets for counts/ages and filters out assignees with 0 open tickets."),
+    only_open: bool = Query(
+        True,
+        description="If true, only considers open tickets for counts/ages and filters out assignees with 0 open tickets.",
+    ),
 ) -> List[Dict[str, Any]]:
     db_path = get_sqlite_path()
     now = datetime.now(timezone.utc)
@@ -738,7 +542,12 @@ def stats_by_assignee(
         assignee = _assignee_label(r["assignee"])
         entry = agg.get(assignee)
         if entry is None:
-            entry = {"assignee": assignee, "open_count": 0, "_min_created": None, "_min_updated": None}
+            entry = {
+                "assignee": assignee,
+                "open_count": 0,
+                "_min_created": None,
+                "_min_updated": None,
+            }
             agg[assignee] = entry
 
         if _is_closed_status(r["status"]):
@@ -764,8 +573,16 @@ def stats_by_assignee(
         if only_open and open_count == 0:
             continue
 
-        oldest_created_hours = _age_hours(now, entry["_min_created"]) if entry["_min_created"] is not None else None
-        oldest_updated_hours = _age_hours(now, entry["_min_updated"]) if entry["_min_updated"] is not None else None
+        oldest_created_hours = (
+            _age_hours(now, entry["_min_created"])
+            if entry["_min_created"] is not None
+            else None
+        )
+        oldest_updated_hours = (
+            _age_hours(now, entry["_min_updated"])
+            if entry["_min_updated"] is not None
+            else None
+        )
 
         out.append(
             {
@@ -884,7 +701,11 @@ def stats_time_by_project() -> List[Dict[str, Any]]:
     for _, entry in agg.items():
         hours = _hours_from_seconds(entry["time_spent_seconds"])
         resolution_count = int(entry["resolved_issues_with_dates"])
-        avg_resolution_hours = round(entry["resolution_total_hours"] / resolution_count, 1) if resolution_count > 0 else None
+        avg_resolution_hours = (
+            round(entry["resolution_total_hours"] / resolution_count, 1)
+            if resolution_count > 0
+            else None
+        )
 
         out.append(
             {
@@ -979,7 +800,8 @@ def stats_status_family_distribution() -> Dict[str, Any]:
         "raw_status_counts": raw_status_counts,
         "raw_status_items": raw_status_items,
     }
-    
+
+
 @app.get("/jira/search_link")
 def jira_search_link(
     assignee: Optional[str] = Query(None),

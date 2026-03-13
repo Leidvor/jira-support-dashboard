@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Client Analytics</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css" />
+    <link rel="stylesheet" href="/static/css/clients.css" />
+  </head>
+  <body class="theme-exec">
+    <div class="page">
+      <div class="header">
+        <div class="brand">
+          <div class="title">Client Analytics</div>
+          <div class="subtitle">
+            Jira project analytics • One project = one client
+          </div>
+        </div>
+
+        <div class="header-right">
+          <div class="header-actions">
+            <a href="/" class="btn btn-secondary">Back to TV dashboard</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="card">
+          <div class="label">Clients</div>
+          <div id="kpiClients" class="value">—</div>
+          <div class="hint">Distinct Jira projects</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Total Tickets</div>
+          <div id="kpiTotalTickets" class="value">—</div>
+          <div class="hint">All tracked issues</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Open</div>
+          <div id="kpiOpenTickets" class="value">—</div>
+          <div class="hint">All non-closed issues</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Closed</div>
+          <div id="kpiClosedTickets" class="value">—</div>
+          <div class="hint">Closed status list</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Avg Resolution</div>
+          <div id="kpiAvgResolution" class="value">—</div>
+          <div class="hint">Resolved tickets only</div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="clients-layout">
+          <div class="panel">
+            <h2>
+              <span>Tickets by client</span>
+              <span class="small" id="chartTicketsMeta">—</span>
+            </h2>
+            <div class="chart-panel-inner clients-chart-panel">
+              <div class="chart-box">
+                <div id="ticketsByClientChart" class="zing-chart-host"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>
+              <span>Open vs Closed by client</span>
+              <span class="small" id="chartOpenClosedMeta">—</span>
+            </h2>
+            <div class="chart-panel-inner clients-chart-panel">
+              <div class="chart-box">
+                <div id="openClosedChart" class="zing-chart-host"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>
+              <span>Average resolution by client</span>
+              <span class="small" id="chartResolutionMeta">—</span>
+            </h2>
+            <div class="chart-panel-inner clients-chart-panel">
+              <div class="chart-box">
+                <div id="resolutionChart" class="zing-chart-host"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel panel-span-2">
+            <h2>
+              <span>Client metrics</span>
+              <span class="small" id="clientsTableMeta">Click a row for details</span>
+            </h2>
+
+            <div id="clientsTableWrap" class="table-wrap scrollable">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 16%">Client</th>
+                    <th class="right" style="width: 12%">Tickets</th>
+                    <th class="right" style="width: 12%">Open</th>
+                    <th class="right" style="width: 12%">Closed</th>
+                    <th class="right" style="width: 16%">Hours</th>
+                    <th class="right" style="width: 16%">Avg / Ticket</th>
+                    <th class="right" style="width: 16%">Avg Resolution</th>
+                  </tr>
+                </thead>
+                <tbody id="clientsTableBody">
+                  <tr>
+                    <td colspan="7" class="muted">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="scroll-cue"></div>
+              <div class="scroll-hint">Scroll</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>
+              <span id="detailsTitle">Client details</span>
+              <span class="small" id="detailsMeta">Select a client</span>
+            </h2>
+
+            <div class="details-stack">
+              <div class="details-mini-grid">
+                <div class="mini-card">
+                  <div class="label">Tickets</div>
+                  <div id="detailTotal" class="value-sm">—</div>
+                </div>
+                <div class="mini-card">
+                  <div class="label">Open</div>
+                  <div id="detailOpen" class="value-sm">—</div>
+                </div>
+                <div class="mini-card">
+                  <div class="label">Closed</div>
+                  <div id="detailClosed" class="value-sm">—</div>
+                </div>
+                <div class="mini-card">
+                  <div class="label">Avg Resolution</div>
+                  <div id="detailAvgResolution" class="value-sm">—</div>
+                </div>
+              </div>
+
+              <div class="details-two-cols">
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th class="right">Count</th>
+                      </tr>
+                    </thead>
+                    <tbody id="statusBreakdownBody">
+                      <tr><td colspan="2" class="muted">No client selected</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Priority</th>
+                        <th class="right">Count</th>
+                      </tr>
+                    </thead>
+                    <tbody id="priorityBreakdownBody">
+                      <tr><td colspan="2" class="muted">No client selected</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 20%">Key</th>
+                      <th style="width: 28%">Status</th>
+                      <th style="width: 18%">Priority</th>
+                      <th style="width: 18%">Assignee</th>
+                      <th class="right" style="width: 16%">Age (h)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="oldestClientTicketsBody">
+                    <tr><td colspan="5" class="muted">No client selected</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span id="runtimeLine" class="mono truncate">Loading…</span>
+        <span id="errorLine" class="mono"></span>
+      </div>
+    </div>
+
+    <script src="/static/vendor/zingchart.min.js"></script>
+    <script src="/static/js/clients.js"></script>
+  </body>
+</html>

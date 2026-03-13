@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Client Review • {{ project_key }}</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css" />
+    <link rel="stylesheet" href="/static/css/client_detail.css" />
+  </head>
+  <body class="theme-exec client-page" data-project-key="{{ project_key }}">
+    <main class="client-shell">
+      <section class="client-hero">
+        <div class="client-hero__main">
+          <div class="client-eyebrow">Jira support review</div>
+          <h1 class="client-title">Client Review • {{ project_key }}</h1>
+          <p class="client-subtitle">
+            A clear view of support activity, backlog health and recent delivery for this Jira project.
+          </p>
+
+          <div class="client-hero__chips">
+            <span class="client-hero__chip">Client-facing review</span>
+            <span class="client-hero__chip">Period-based analytics</span>
+            <span class="client-hero__chip">Support & backlog health</span>
+          </div>
+        </div>
+
+        <aside class="client-hero__side">
+          <div class="client-filters-card">
+            <div class="client-filters-card__top">
+              <div>
+                <div class="client-filters-card__title">Filters</div>
+                <div class="client-filters-card__subtitle">
+                  Adapt the review period and the main activity axis.
+                </div>
+              </div>
+            </div>
+
+            <div id="dataScopeNotice" class="client-scope-notice" hidden></div>
+
+            <div class="client-filters">
+              <label class="client-filter">
+                <span class="client-filter__label">Period</span>
+                <select id="daysSelect">
+                  <option value="0">All time</option>
+                  <option value="7">7 days</option>
+                  <option value="30" selected>30 days</option>
+                  <option value="90">90 days</option>
+                  <option value="180">180 days</option>
+                  <option value="365">365 days</option>
+                </select>
+              </label>
+
+              <label class="client-filter">
+                <span class="client-filter__label">Date field</span>
+                <select id="dateFieldSelect">
+                  <option value="created">Created</option>
+                  <option value="updated" selected>Updated</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="client-actions">
+              <a href="/clients" class="btn btn-secondary">Back to clients</a>
+              <a href="/" class="btn btn-secondary">Back to TV dashboard</a>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="client-kpi-grid" aria-label="Key performance indicators">
+        <article class="client-kpi-card client-kpi-card--open">
+          <div class="client-kpi-card__label">Open tickets</div>
+          <div id="kpiOpen" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Current backlog snapshot</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--closed">
+          <div class="client-kpi-card__label">Closed tickets</div>
+          <div id="kpiClosed" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">All-time resolved tickets</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--rate">
+          <div class="client-kpi-card__label">Close rate</div>
+          <div id="kpiCloseRate" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Overall closure ratio</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--resolution">
+          <div class="client-kpi-card__label">Avg resolution</div>
+          <div id="kpiAvgResolution" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Average resolution time overall</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--created">
+          <div class="client-kpi-card__label" id="kpiCreatedPeriodLabel">Created last 30d</div>
+          <div id="kpiCreatedPeriod" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Created during selected period</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--updated">
+          <div class="client-kpi-card__label" id="kpiUpdatedPeriodLabel">Updated last 30d</div>
+          <div id="kpiUpdatedPeriod" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Touched during selected period</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--resolved">
+          <div class="client-kpi-card__label" id="kpiResolvedPeriodLabel">Resolved last 30d</div>
+          <div id="kpiResolvedPeriod" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Resolved during selected period</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--oldest">
+          <div class="client-kpi-card__label">Oldest open</div>
+          <div id="kpiOldestOpen" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Current oldest open ticket</div>
+        </article>
+
+        <article class="client-kpi-card client-kpi-card--critical-open">
+          <div class="client-kpi-card__label">High / critical open</div>
+          <div id="kpiHighCriticalOpen" class="client-kpi-card__value">—</div>
+          <div class="client-kpi-card__hint">Current priority exposure</div>
+        </article>
+      </section>
+
+      <section class="client-main-stack" aria-label="Client dashboard content">
+        <article class="client-panel client-panel--chart client-panel--hero-chart">
+          <div class="client-panel__head">
+            <div>
+              <h2 class="client-panel__title">
+                <span id="timelineTitle">Updated vs resolved trend</span>
+              </h2>
+              <p class="client-panel__subtitle">
+                Activity over the selected review period.
+              </p>
+            </div>
+            <div class="client-panel__meta" id="timelineMeta">—</div>
+          </div>
+
+          <div class="client-chart-frame client-chart-frame--lg">
+            <div id="timelineChart" class="zing-chart-host"></div>
+          </div>
+        </article>
+
+        <section class="client-secondary-grid">
+          <article class="client-panel client-panel--chart">
+            <div class="client-panel__head">
+              <div>
+                <h2 class="client-panel__title">Status distribution</h2>
+                <p class="client-panel__subtitle">
+                  Status mix during the selected review period.
+                </p>
+              </div>
+              <div class="client-panel__meta" id="statusMeta">—</div>
+            </div>
+
+            <div class="client-chart-frame">
+              <div id="statusChart" class="zing-chart-host"></div>
+            </div>
+
+            <div id="statusLegend" class="chart-legend-list"></div>
+          </article>
+
+          <article class="client-panel client-panel--chart">
+            <div class="client-panel__head">
+              <div>
+                <h2 class="client-panel__title">Priority distribution</h2>
+                <p class="client-panel__subtitle">
+                  Priority mix during the selected review period.
+                </p>
+              </div>
+              <div class="client-panel__meta" id="priorityMeta">—</div>
+            </div>
+
+            <div class="client-chart-frame">
+              <div id="priorityChart" class="zing-chart-host"></div>
+            </div>
+
+            <div id="priorityLegend" class="chart-legend-list"></div>
+          </article>
+
+          <article class="client-panel client-panel--table client-panel--attention">
+            <div class="client-panel__head">
+              <div>
+                <h2 class="client-panel__title">Open tickets requiring attention</h2>
+                <p class="client-panel__subtitle">
+                  Current oldest open tickets requiring follow-up.
+                </p>
+              </div>
+            </div>
+
+            <div class="client-table-wrap client-table-wrap--attention">
+              <table class="client-table">
+                <thead>
+                  <tr>
+                    <th style="width: 18%">Key</th>
+                    <th style="width: 28%">Status</th>
+                    <th style="width: 18%">Priority</th>
+                    <th style="width: 22%">Assignee</th>
+                    <th style="width: 14%">Age</th>
+                  </tr>
+                </thead>
+                <tbody id="oldestOpenBody">
+                  <tr>
+                    <td colspan="5" class="muted">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <article class="client-panel client-panel--chart client-panel--wide">
+          <div class="client-panel__head">
+            <div>
+              <h2 class="client-panel__title">Backlog aging</h2>
+              <p class="client-panel__subtitle">
+                Current open backlog by age bucket.
+              </p>
+            </div>
+            <div class="client-panel__meta" id="backlogMeta">Open tickets only</div>
+          </div>
+
+          <div class="client-chart-frame">
+            <div id="backlogChart" class="zing-chart-host"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="client-tables-grid" aria-label="Recent ticket activity">
+        <article class="client-panel client-panel--table">
+          <div class="client-panel__head">
+            <div>
+              <h2 class="client-panel__title">Recent created tickets</h2>
+              <p class="client-panel__subtitle">
+                Latest created tickets in the project.
+              </p>
+            </div>
+          </div>
+
+          <div class="client-table-wrap">
+            <table class="client-table">
+              <thead>
+                <tr>
+                  <th style="width: 23%">Key</th>
+                  <th style="width: 33%">Status</th>
+                  <th style="width: 20%">Priority</th>
+                  <th style="width: 24%">Assignee</th>
+                </tr>
+              </thead>
+              <tbody id="recentCreatedBody">
+                <tr>
+                  <td colspan="4" class="muted">Loading…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="client-panel client-panel--table">
+          <div class="client-panel__head">
+            <div>
+              <h2 class="client-panel__title">Recent resolved tickets</h2>
+              <p class="client-panel__subtitle">
+                Latest resolved tickets in the project.
+              </p>
+            </div>
+          </div>
+
+          <div class="client-table-wrap">
+            <table class="client-table">
+              <thead>
+                <tr>
+                  <th style="width: 23%">Key</th>
+                  <th style="width: 33%">Status</th>
+                  <th style="width: 20%">Priority</th>
+                  <th style="width: 24%">Assignee</th>
+                </tr>
+              </thead>
+              <tbody id="recentResolvedBody">
+                <tr>
+                  <td colspan="4" class="muted">Loading…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/static/vendor/zingchart.min.js"></script>
+    <script src="/static/js/client_detail.js"></script>
+  </body>
+</html>
