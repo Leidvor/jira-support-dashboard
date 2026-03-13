@@ -31,6 +31,21 @@ const oldestClientTicketsBody = document.getElementById(
 let clientsOverview = null;
 let selectedProjectKey = null;
 
+let hoverTimer = null;
+let activeDetailsRequest = 0;
+
+const clientDetailsCache = new Map();
+
+const HOVER_PREVIEW_DELAY_MS = 120;
+const SHIMMER_SHOW_DELAY_MS = 0;
+const SHIMMER_MIN_VISIBLE_MS = 300;
+
+let detailsLoadingState = {
+  shimmerTimer: null,
+  shimmerVisibleAt: 0,
+  isShimmerVisible: false,
+};
+
 function fmtInt(n) {
   if (n === null || n === undefined) return "—";
   return Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -44,6 +59,24 @@ function fmtHours1(n) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
+}
+
+function fmtDuration(n) {
+  if (n === null || n === undefined) return "—";
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+
+  if (v >= 24) {
+    return `${(v / 24).toLocaleString(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })} d`;
+  }
+
+  return `${v.toLocaleString(undefined, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} h`;
 }
 
 function clearError() {
@@ -207,7 +240,7 @@ function renderResolutionChart(items) {
 
 function renderOverviewTable(items) {
   clientsTableBody.innerHTML = "";
-  clientsTableMeta.textContent = `${fmtInt(items.length)} clients • Click a row for details`;
+  clientsTableMeta.textContent = `${fmtInt(items.length)} clients • Hover to preview • Click a row for details`;
 
   if (!items.length) {
     clientsTableBody.innerHTML = `<tr><td colspan="7" class="muted">No data</td></tr>`;
@@ -218,6 +251,23 @@ function renderOverviewTable(items) {
     const tr = document.createElement("tr");
     tr.classList.add("clickable-row");
     tr.dataset.projectKey = row.project_key;
+
+    tr.addEventListener("mouseenter", () => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+      }
+
+      hoverTimer = setTimeout(() => {
+        previewClient(row.project_key);
+      }, HOVER_PREVIEW_DELAY_MS);
+    });
+
+    tr.addEventListener("mouseleave", () => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+    });
 
     tr.addEventListener("click", () => {
       window.location.href = `/clients/${encodeURIComponent(row.project_key)}`;
@@ -261,6 +311,84 @@ function renderEmptyDetails() {
   statusBreakdownBody.innerHTML = `<tr><td colspan="2" class="muted">No client selected</td></tr>`;
   priorityBreakdownBody.innerHTML = `<tr><td colspan="2" class="muted">No client selected</td></tr>`;
   oldestClientTicketsBody.innerHTML = `<tr><td colspan="5" class="muted">No client selected</td></tr>`;
+}
+
+function startDetailsShimmer(projectKey) {
+  stopDetailsShimmerTimerOnly();
+
+  detailsLoadingState.shimmerTimer = setTimeout(() => {
+    detailsLoadingState.isShimmerVisible = true;
+    detailsLoadingState.shimmerVisibleAt = Date.now();
+
+    detailsTitle.textContent = `Client details • ${projectKey}`;
+    detailsMeta.textContent = "Loading preview…";
+
+    detailTotal.innerHTML = `<span class="shimmer-block shimmer-value"></span>`;
+    detailOpen.innerHTML = `<span class="shimmer-block shimmer-value"></span>`;
+    detailClosed.innerHTML = `<span class="shimmer-block shimmer-value"></span>`;
+    detailAvgResolution.innerHTML = `<span class="shimmer-block shimmer-value"></span>`;
+
+    statusBreakdownBody.innerHTML = Array.from({ length: 5 })
+      .map(
+        () => `
+        <tr class="shimmer-row">
+          <td><span class="shimmer-block shimmer-line shimmer-line-lg"></span></td>
+          <td class="right"><span class="shimmer-block shimmer-line shimmer-line-sm"></span></td>
+        </tr>
+      `,
+      )
+      .join("");
+
+    priorityBreakdownBody.innerHTML = Array.from({ length: 5 })
+      .map(
+        () => `
+        <tr class="shimmer-row">
+          <td><span class="shimmer-block shimmer-line shimmer-line-lg"></span></td>
+          <td class="right"><span class="shimmer-block shimmer-line shimmer-line-sm"></span></td>
+        </tr>
+      `,
+      )
+      .join("");
+
+    oldestClientTicketsBody.innerHTML = Array.from({ length: 4 })
+      .map(
+        () => `
+        <tr class="shimmer-row">
+          <td><span class="shimmer-block shimmer-line shimmer-line-md"></span></td>
+          <td><span class="shimmer-block shimmer-line shimmer-line-lg"></span></td>
+          <td><span class="shimmer-block shimmer-line shimmer-line-md"></span></td>
+          <td><span class="shimmer-block shimmer-line shimmer-line-md"></span></td>
+          <td class="right"><span class="shimmer-block shimmer-line shimmer-line-sm"></span></td>
+        </tr>
+      `,
+      )
+      .join("");
+  }, SHIMMER_SHOW_DELAY_MS);
+}
+
+function stopDetailsShimmerTimerOnly() {
+  if (detailsLoadingState.shimmerTimer) {
+    clearTimeout(detailsLoadingState.shimmerTimer);
+    detailsLoadingState.shimmerTimer = null;
+  }
+}
+
+async function stopDetailsShimmerIfNeeded() {
+  stopDetailsShimmerTimerOnly();
+
+  if (!detailsLoadingState.isShimmerVisible) {
+    return;
+  }
+
+  const elapsed = Date.now() - detailsLoadingState.shimmerVisibleAt;
+  const remaining = Math.max(0, SHIMMER_MIN_VISIBLE_MS - elapsed);
+
+  if (remaining > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+
+  detailsLoadingState.isShimmerVisible = false;
+  detailsLoadingState.shimmerVisibleAt = 0;
 }
 
 function renderDetails(details) {
@@ -318,36 +446,57 @@ function renderDetails(details) {
   }
 }
 
-function fmtDuration(n) {
-  if (n === null || n === undefined) return "—";
-  const v = Number(n);
-  if (!Number.isFinite(v)) return "—";
-
-  if (v >= 24) {
-    return `${(v / 24).toLocaleString(undefined, {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    })} d`;
-  }
-
-  return `${v.toLocaleString(undefined, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })} h`;
+async function applyDetails(details) {
+  await stopDetailsShimmerIfNeeded();
+  renderDetails(details);
 }
 
-async function selectClient(projectKey) {
+async function loadClientDetails(projectKey, { useShimmer = true } = {}) {
+  if (!projectKey) return;
+
   selectedProjectKey = projectKey;
   updateSelectedClientRow();
+  clearError();
+
+  if (clientDetailsCache.has(projectKey)) {
+    await stopDetailsShimmerIfNeeded();
+    renderDetails(clientDetailsCache.get(projectKey));
+    return;
+  }
+
+  const requestId = ++activeDetailsRequest;
+
+  if (useShimmer) {
+    startDetailsShimmer(projectKey);
+  }
 
   try {
     const details = await fetchJson(
       `/stats/clients/details/${encodeURIComponent(projectKey)}`,
     );
-    renderDetails(details);
+
+    if (requestId !== activeDetailsRequest) {
+      return;
+    }
+
+    clientDetailsCache.set(projectKey, details);
+    await applyDetails(details);
   } catch (e) {
+    if (requestId !== activeDetailsRequest) {
+      return;
+    }
+
+    await stopDetailsShimmerIfNeeded();
     showError(e);
   }
+}
+
+async function previewClient(projectKey) {
+  await loadClientDetails(projectKey, { useShimmer: true });
+}
+
+async function selectClient(projectKey) {
+  await loadClientDetails(projectKey, { useShimmer: false });
 }
 
 function renderOverview(data) {

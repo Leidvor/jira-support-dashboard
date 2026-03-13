@@ -64,6 +64,53 @@
   font-weight: 700;
 }
 
+.shimmer-block {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef3fb 25%, #ffffff 37%, #eef3fb 63%);
+  background-size: 400% 100%;
+  animation: clients-shimmer 1.2s ease-in-out infinite;
+}
+
+.shimmer-value {
+  width: 72px;
+  height: 28px;
+  border-radius: 10px;
+}
+
+.shimmer-line {
+  height: 14px;
+  border-radius: 999px;
+}
+
+.shimmer-line-sm {
+  width: 36px;
+}
+
+.shimmer-line-md {
+  width: 64px;
+}
+
+.shimmer-line-lg {
+  width: 120px;
+}
+
+.shimmer-row td {
+  vertical-align: middle;
+}
+
+@keyframes clients-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 @media (max-width: 1500px) {
   .clients-layout {
     grid-template-columns: 1fr 1fr;
